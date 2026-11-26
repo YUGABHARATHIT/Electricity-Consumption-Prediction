@@ -1,0 +1,419 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Electricity Consumption Prediction</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f1f5f9;
+            margin: 0;
+            padding: 25px;
+            color: #1e293b;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: auto;
+        }
+
+        h1, h2 {
+            color: #1e3a8a;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            margin-bottom: 25px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.08);
+        }
+
+        .input-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 7px;
+        }
+
+        input {
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 15px;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 13px 25px;
+            margin-top: 22px;
+            border-radius: 7px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        #result {
+            margin-top: 20px;
+            font-size: 22px;
+            font-weight: bold;
+            color: #15803d;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+            text-align: center;
+        }
+
+        th {
+            background: #dbeafe;
+        }
+
+        @media(max-width: 650px) {
+            .input-grid {
+                grid-template-columns: 1fr;
+            }
+
+            body {
+                padding: 12px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Electricity Consumption Prediction</h1>
+
+    <p>Predict your next-hour electricity consumption using Machine Learning.</p>
+
+    <!-- Prediction Form -->
+    <div class="card">
+
+        <h2>Enter Power Details</h2>
+
+        <form id="predictionForm">
+
+            <div class="input-grid">
+
+                <div>
+                    <label>Current Power (kW)</label>
+                    <input type="number" step="any" name="power" value="1.5" required>
+                </div>
+
+                <div>
+                    <label>Previous Hour Power (kW)</label>
+                    <input type="number" step="any" name="power_lag_1" value="1.4" required>
+                </div>
+
+                <div>
+                    <label>2 Hours Before Power (kW)</label>
+                    <input type="number" step="any" name="power_lag_2" value="1.3" required>
+                </div>
+
+                <div>
+                    <label>3 Hours Before Power (kW)</label>
+                    <input type="number" step="any" name="power_lag_3" value="1.6" required>
+                </div>
+
+                <div>
+                    <label>24 Hours Before Power (kW)</label>
+                    <input type="number" step="any" name="power_lag_24" value="1.2" required>
+                </div>
+
+                <div>
+                    <label>3 Hour Average Power (kW)</label>
+                    <input type="number" step="any" name="rolling_mean_3" value="1.4" required>
+                </div>
+
+                <div>
+                    <label>24 Hour Average Power (kW)</label>
+                    <input type="number" step="any" name="rolling_mean_24" value="1.3" required>
+                </div>
+
+                <div>
+                    <label>Target Hour (0-23)</label>
+                    <input type="number" name="target_hour" min="0" max="23" value="18" required>
+                </div>
+
+                <div>
+                    <label>Day of Week (0-6)</label>
+                    <input type="number" name="target_dayofweek" min="0" max="6" value="2" required>
+                </div>
+
+                <div>
+                    <label>Month (1-12)</label>
+                    <input type="number" name="target_month" min="1" max="12" value="11" required>
+                </div>
+
+            </div>
+
+            <button type="submit">Predict Electricity</button>
+
+        </form>
+
+        <div id="result"></div>
+
+    </div>
+
+
+    <!-- Prediction History -->
+    <div class="card">
+
+        <h2>Prediction History</h2>
+
+        <div class="table-wrapper">
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Current Power (kW)</th>
+                        <th>Predicted Consumption (kW)</th>
+                        <th>Date & Time</th>
+                    </tr>
+                </thead>
+
+                <tbody id="historyTable">
+                    <tr>
+                        <td colspan="3">Loading history...</td>
+                    </tr>
+                </tbody>
+            </table>
+
+        </div>
+
+    </div>
+
+
+    <!-- Prediction Graph -->
+    <div class="card">
+
+        <h2>Electricity Consumption Graph</h2>
+
+        <canvas id="predictionChart"></canvas>
+
+    </div>
+
+</div>
+
+
+<script>
+
+    // Prediction API
+    const form = document.getElementById("predictionForm");
+
+    form.addEventListener("submit", async function(event) {
+
+        event.preventDefault();
+
+        const formData = new FormData(form);
+
+        const inputData = {};
+
+        formData.forEach((value, key) => {
+            inputData[key] = Number(value);
+        });
+
+        const result = document.getElementById("result");
+
+        result.innerText = "Predicting...";
+
+        try {
+
+            const response = await fetch("/api/predict/", {
+
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify(inputData)
+
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Prediction failed");
+            }
+
+            result.innerText =
+                "Predicted Consumption: " +
+                data.predicted_consumption + " kW";
+
+            // Reload history after prediction
+            loadHistory();
+
+        } catch(error) {
+
+            result.innerText = "Error: " + error.message;
+
+        }
+
+    });
+
+
+    // Prediction History and Graph
+    let myChart = null;
+
+    async function loadHistory() {
+
+        try {
+
+            const response = await fetch("/api/history/");
+
+            if (!response.ok) {
+                throw new Error("History loading failed");
+            }
+
+            const history = await response.json();
+
+            const table = document.getElementById("historyTable");
+
+            table.innerHTML = "";
+
+            history.forEach(item => {
+
+                const row = document.createElement("tr");
+
+                const powerCell = document.createElement("td");
+                powerCell.textContent = item.power;
+
+                const predictionCell = document.createElement("td");
+                predictionCell.textContent = item.predicted_consumption;
+
+                const dateCell = document.createElement("td");
+                dateCell.textContent =
+                    new Date(item.created_at).toLocaleString();
+
+                row.appendChild(powerCell);
+                row.appendChild(predictionCell);
+                row.appendChild(dateCell);
+
+                table.appendChild(row);
+
+            });
+
+            if (history.length === 0) {
+
+                table.innerHTML =
+                    "<tr><td colspan='3'>No prediction history found</td></tr>";
+
+            }
+
+            // Prepare Graph Data
+            const labels = history.map(item =>
+                new Date(item.created_at).toLocaleString()
+            ).reverse();
+
+            const values = history.map(item =>
+                item.predicted_consumption
+            ).reverse();
+
+            // Create Chart
+            const ctx = document.getElementById("predictionChart");
+
+            if (myChart) {
+                myChart.destroy();
+            }
+
+            myChart = new Chart(ctx, {
+
+                type: "line",
+
+                data: {
+
+                    labels: labels,
+
+                    datasets: [{
+
+                        label: "Predicted Consumption (kW)",
+
+                        data: values,
+
+                        borderWidth: 2,
+
+                        tension: 0.3
+
+                    }]
+
+                },
+
+                options: {
+
+                    responsive: true,
+
+                    scales: {
+
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: "Power (kW)"
+                            }
+                        },
+
+                        x: {
+                            title: {
+                                display: true,
+                                text: "Prediction Date & Time"
+                            }
+                        }
+
+                    }
+
+                }
+
+            });
+
+        } catch(error) {
+
+            console.error("History Error:", error);
+
+        }
+
+    }
+
+    // Load history when page opens
+    loadHistory();
+
+</script>
+
+</body>
+</html>
+
