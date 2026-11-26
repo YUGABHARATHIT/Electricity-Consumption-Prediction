@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.ipynb
+.ipynb_checkpoints/
+*.csv
+*.xlsx
+backup/
+electricity_backend_backup/
